@@ -15,10 +15,10 @@ def helmLint(String chart_dir) {
 
 }
 
-def helmConfig() {
+def helmConfig(String namespace) {
     //setup helm connectivity to Kubernetes API and Tiller
     println "initiliazing helm client"
-    sh "helm --client-only init"
+    sh "helm init --tiller-namespace ${namespace}"
     println "checking client/server version"
     sh "helm version"
 }
@@ -26,7 +26,7 @@ def helmConfig() {
 
 def helmDeploy(Map args) {
     //configure helm client and confirm tiller process is installed
-    helmConfig()
+    helmConfig(args.namespace)
     def String release_overrides = ""
     if (args.set) {
       release_overrides = getHelmReleaseOverrides(args.set)
