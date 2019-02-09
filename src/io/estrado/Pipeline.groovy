@@ -18,7 +18,7 @@ def helmLint(String chart_dir) {
 def helmConfig(String namespace) {
     //setup helm connectivity to Kubernetes API and Tiller
     println "initiliazing helm client"
-    sh "helm init --tiller-namespace ${namespace}"
+    sh "helm init"
     println "checking client/server version"
     sh "helm version"
 }
