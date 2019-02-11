@@ -1,5 +1,5 @@
 #!/usr/bin/groovy
-package io.estrado;
+package jenkinsloveskubernetes.lib;
 
 def kubectlTest() {
     // Test that kubectl can correctly communication with the Kubernetes API
@@ -15,10 +15,10 @@ def helmLint(String chart_dir) {
 
 }
 
-def helmConfig(String namespace) {
+def helmConfig() {
     //setup helm connectivity to Kubernetes API and Tiller
     println "initiliazing helm client"
-    sh "helm init"
+    sh "helm --client-only init"
     println "checking client/server version"
     sh "helm version"
 }
@@ -26,11 +26,7 @@ def helmConfig(String namespace) {
 
 def helmDeploy(Map args) {
     //configure helm client and confirm tiller process is installed
-    helmConfig(args.namespace)
-    def String release_overrides = ""
-    if (args.set) {
-      release_overrides = getHelmReleaseOverrides(args.set)
-    }
+    helmConfig()
 
     def String namespace
 
@@ -44,12 +40,15 @@ def helmDeploy(Map args) {
     if (args.dry_run) {
         println "Running dry-run deployment"
 
-        sh "helm upgrade --dry-run --install ${args.name} ${args.chart_dir} " + (release_overrides ? "--set ${release_overrides}" : "") + " --namespace=${namespace}"
+        sh "helm upgrade --dry-run --install ${args.name} ${args.chart_dir} --set imageTag=${args.version_tag},replicas=${args.replicas},cpu=${args.cpu},memory=${args.memory},ingress.hostname=${args.hostname} --namespace=${namespace}"
     } else {
         println "Running deployment"
 
-        sh "helm dependency update ${args.chart_dir}"
-        sh "helm upgrade --install ${args.name} ${args.chart_dir} " + (release_overrides ? "--set ${release_overrides}" : "") + " --namespace=${namespace}" + " --wait"
+        // reimplement --wait once it works reliable
+        sh "helm upgrade --install ${args.name} ${args.chart_dir} --set imageTag=${args.version_tag},replicas=${args.replicas},cpu=${args.cpu},memory=${args.memory},ingress.hostname=${args.hostname} --namespace=${namespace}"
+
+        // sleeping until --wait works reliably
+        sleep(20)
 
         echo "Application ${args.name} successfully deployed. Use helm status ${args.name} to check"
     }
@@ -94,17 +93,12 @@ def containerBuildPub(Map args) {
 
     println "Running Docker build/publish: ${args.host}/${args.acct}/${args.repo}:${args.tags}"
 
-    docker.withRegistry("https://${args.host}", "${args.auth_id}") {
-
-        // def img = docker.build("${args.acct}/${args.repo}", args.dockerfile)
-        def img = docker.image("${args.acct}/${args.repo}")
-        sh "docker build --build-arg VCS_REF=${env.GIT_SHA} --build-arg BUILD_DATE=`date -u +'%Y-%m-%dT%H:%M:%SZ'` -t ${args.acct}/${args.repo} ${args.dockerfile}"
-        for (int i = 0; i < args.tags.size(); i++) {
-            img.push(args.tags.get(i))
-        }
-
-        return img.id
-    }
+  
+    sh "docker build --build-arg VCS_REF=${env.GIT_SHA} --build-arg BUILD_DATE=`date -u +'%Y-%m-%dT%H:%M:%SZ'` -t ${args.acct}/${args.repo} ${args.dockerfile}"
+    for (int i = 0; i < args.tags.size(); i++) {
+        sh "docker tag ${args.acct}/${args.repo} ${args.acct}/${args.repo}:${args.tags.get(i)}"
+        sh "docker push ${args.acct}/${args.repo}:${args.tags.get(i)}"
+    }  
 }
 
 def getContainerTags(config, Map tags = [:]) {
@@ -186,30 +180,4 @@ def getMapValues(Map map=[:]) {
     }
 
     return map_values
-}
-
-@NonCPS
-def getHelmReleaseOverrides(Map map=[:]) {
-    // jenkins and workflow restriction force this function instead of map.each(): https://issues.jenkins-ci.org/browse/JENKINS-27421
-    def options = ""
-    map.each { key, value ->
-        options += "$key=$value,"
-    }
-
-    return options
-}
-
-def String getDomainName(String url) throws URISyntaxException {
-    URI uri = new URI(url);
-    String domain = uri.getHost();
-    return domain.startsWith("www.") ? domain.substring(4) : domain;
-}
-
-def String getSubDomainName(String domain) {
-    return domain.substring(domain.indexOf('.') + 1);
-}
-
-// Used to get the subdomain Jenkins is hosted on for new ingress resources.
-def String getSubDomainNameFromURL(String url) {
-    return getSubDomainName(getDomainName(url));
 }
