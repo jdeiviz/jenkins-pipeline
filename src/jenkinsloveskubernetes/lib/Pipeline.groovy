@@ -97,8 +97,8 @@ def containerBuildPub(Map args) {
   
     sh "docker build --build-arg VCS_REF=${env.GIT_SHA} --build-arg BUILD_DATE=`date -u +'%Y-%m-%dT%H:%M:%SZ'` -t ${args.acct}/${args.repo} ${args.dockerfile}"
     for (int i = 0; i < args.tags.size(); i++) {
-        sh "docker tag ${args.acct}/${args.repo} ${args.acct}/${args.repo}:${args.tags.get(i)}"
-        sh "docker push ${args.acct}/${args.repo}:${args.tags.get(i)}"
+        sh "docker tag ${args.acct}/${args.repo} ${args.host}/${args.acct}/${args.repo}:${args.tags.get(i)}"
+        sh "docker push ${args.host}/${args.acct}/${args.repo}:${args.tags.get(i)}"
     }  
 }
 
