@@ -91,10 +91,12 @@ def containerBuildPub(Map args) {
 
     println "Running Kaniko build/publish: ${args.host}/${args.acct}/${args.repo}:${args.tags}"
 
-    def destinations
+    def destinations = ""
     for (int i = 0; i < args.tags.size(); i++) {
         destinations += "-d ${args.host}/${args.acct}/${args.repo}:${args.tags.get(i)}"
     }
+    println "destinations: ${destinations}"
+
     sh """#!/busybox/sh
     /kaniko/executor -c `pwd` ${destinations}
     """
