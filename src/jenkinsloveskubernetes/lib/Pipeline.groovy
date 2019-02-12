@@ -18,13 +18,13 @@ def helmLint(String chart_dir) {
 def helmConfig(String namespace) {
     //setup helm connectivity to Kubernetes API and Tiller
     println "initiliazing helm client"
-    sh "helm init"
+    sh "helm init -c"
     println "checking client/server version"
     sh "helm version"
 }
 
 
-def helmDeploy(Map args) {
+def helmTemplate(Map args) {
     //configure helm client and confirm tiller process is installed
     helmConfig(args.namespace)
     def String release_overrides = ""
@@ -40,31 +40,28 @@ def helmDeploy(Map args) {
     } else {
         namespace = args.namespace
     }
+    
+    def pwd = pwd()
 
-    if (args.dry_run) {
-        println "Running dry-run deployment"
+    println "Running deployment"
+    
+    sh "helm dependency update ${args.chart_dir}"
+    sh "helm template --is-upgrade --name ${args.name} " + (release_overrides ? "--set ${release_overrides}" : "") + " --namespace ${namespace} ${args.chart_dir} > ${pwd}/croc-hunter.yaml"
 
-        sh "helm upgrade --dry-run --install ${args.name} ${args.chart_dir} " + (release_overrides ? "--set ${release_overrides}" : "") + " --namespace=${namespace}"
-    } else {
-        println "Running deployment"
-
-        sh "helm dependency update ${args.chart_dir}"
-        sh "helm upgrade --install ${args.name} ${args.chart_dir} " + (release_overrides ? "--set ${release_overrides}" : "") + " --namespace=${namespace}" + " --wait"
-
-        echo "Application ${args.name} successfully deployed. Use helm status ${args.name} to check"
-    }
+    echo "Application ${args.name} successfully templated."
 }
 
-def helmDelete(Map args) {
-        println "Running helm delete ${args.name}"
+def kubectlDeploy(Map args) {
+    def pwd = pwd()
+    sh "kubectl apply -f ${pwd}/croc-hunter.yaml"
 
-        sh "helm delete ${args.name}"
+    echo "Application ${args.name} successfully deployed."
 }
 
-def helmTest(Map args) {
-    println "Running Helm test"
+def kubectDelete(Map args) {
+    println "Running kubect delete ${args.name}"
 
-    sh "helm test ${args.name} --cleanup"
+    sh "kubectl delete all -l release=${args.name}"
 }
 
 def gitEnvVars() {
@@ -92,14 +89,15 @@ def gitEnvVars() {
 
 def containerBuildPub(Map args) {
 
-    println "Running Docker build/publish: ${args.host}/${args.acct}/${args.repo}:${args.tags}"
+    println "Running Kaniko build/publish: ${args.host}/${args.acct}/${args.repo}:${args.tags}"
 
-  
-    sh "docker build --build-arg VCS_REF=${env.GIT_SHA} --build-arg BUILD_DATE=`date -u +'%Y-%m-%dT%H:%M:%SZ'` -t ${args.acct}/${args.repo} ${args.dockerfile}"
+    def destinations
     for (int i = 0; i < args.tags.size(); i++) {
-        sh "docker tag ${args.acct}/${args.repo} ${args.host}/${args.acct}/${args.repo}:${args.tags.get(i)}"
-        sh "docker push ${args.host}/${args.acct}/${args.repo}:${args.tags.get(i)}"
-    }  
+        destinations += "-d ${args.host}/${args.acct}/${args.repo}:${args.tags.get(i)}"
+    }
+    sh """#!/busybox/sh
+    /kaniko/executor -c `pwd` ${destinations}
+    """
 }
 
 def getContainerTags(config, Map tags = [:]) {
