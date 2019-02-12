@@ -96,9 +96,8 @@ def containerBuildPub(Map args) {
         destinations += "-d ${args.host}/${args.acct}/${args.repo}:${args.tags.get(i)}"
     }
     println "destinations: ${destinations}"
-
     sh """#!/busybox/sh
-    /kaniko/executor -c `pwd` ${destinations}
+    /kaniko/executor -c `pwd` --build-arg VCS_REF=${env.GIT_SHA} --build-arg BUILD_DATE=`date -u +'%Y-%m-%dT%H:%M:%SZ'` ${destinations}
     """
 }
 
